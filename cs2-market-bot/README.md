@@ -29,7 +29,7 @@ cd cs2-market-bot
 PYTHONPATH=src python3 -m cs2_market_bot scan --config watchlist.example.json
 ```
 
-Copy `watchlist.example.json` and edit the item names and the spend caps. Prices in that file are cents. `budget_cents` and `max_unit_price_cents` are required.
+Copy `watchlist.example.json` and edit the item names and the spend caps. Prices in that file are cents. `budget_cents` and `max_unit_price_cents` are required. The example caps one item and one run at $20, so a scan skips the sample skins while they trade above that.
 
 | Field | Meaning |
 | --- | --- |

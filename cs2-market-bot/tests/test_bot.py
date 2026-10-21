@@ -13,7 +13,7 @@ from helpers import NAME, make_rules
 class FakeMarket:
     def __init__(self) -> None:
         self.quotes: dict[str, Quote | Exception] = {}
-        self.listings: dict[str, list[Listing] | Exception] = {}
+        self.rows: dict[str, list[Listing] | Exception] = {}
         self.buys: list[tuple[str, Listing]] = []
         self.buy_error: Exception | None = None
         self.buy_result = BuyResult("purchased", "ok")
@@ -29,7 +29,7 @@ class FakeMarket:
         return value
 
     def listings(self, name: str, count: int) -> list[Listing]:
-        value = self.listings[name]
+        value = self.rows[name]
         if isinstance(value, Exception):
             raise value
         return value[:count]
@@ -56,7 +56,7 @@ class BotTests(unittest.TestCase):
     def test_dry_run_reserves_budget_without_buying_or_writing_state(self) -> None:
         market = FakeMarket()
         market.quotes[NAME] = cheap_quote()
-        market.listings[NAME] = [listing("10", 700, 100), listing("11", 750, 110)]
+        market.rows[NAME] = [listing("10", 700, 100), listing("11", 720, 100)]
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory) / "state.json"
             original = '{"listings": {}}\n'
@@ -71,15 +71,16 @@ class BotTests(unittest.TestCase):
                 emit=events.append,
             )
             report = bot.run_once(purchase=True)
+            saved = state.read_text(encoding="utf-8")
         self.assertEqual(market.buys, [])
-        self.assertEqual(state.read_text(encoding="utf-8"), original)
+        self.assertEqual(saved, original)
         self.assertEqual([order["status"] for order in report.orders], ["dry_run", "skipped"])
         self.assertTrue(all("session" not in json.dumps(event) for event in events))
 
     def test_live_buy_persists_and_will_not_repeat_the_listing(self) -> None:
         market = FakeMarket()
         market.quotes[NAME] = cheap_quote()
-        market.listings[NAME] = [listing("10", 700, 100)]
+        market.rows[NAME] = [listing("10", 700, 100)]
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory) / "state.json"
             bot = Bot(
@@ -100,7 +101,7 @@ class BotTests(unittest.TestCase):
     def test_rechecks_the_listing_price_against_the_band(self) -> None:
         market = FakeMarket()
         market.quotes[NAME] = cheap_quote()
-        market.listings[NAME] = [listing("9", 50, 10), listing("10", 900, 50), listing("11", 700, 100)]
+        market.rows[NAME] = [listing("9", 50, 10), listing("10", 900, 50), listing("11", 700, 100)]
         bot = Bot(client=market, rules=make_rules(), live=True, emit=lambda event: None)
         report = bot.run_once(purchase=True)
         self.assertEqual([order["listing_id"] for order in report.orders], ["11"])
@@ -109,7 +110,7 @@ class BotTests(unittest.TestCase):
     def test_scan_does_not_fetch_listings(self) -> None:
         market = FakeMarket()
         market.quotes[NAME] = cheap_quote()
-        market.listings[NAME] = SteamError("should not fetch")
+        market.rows[NAME] = SteamError("should not fetch")
         bot = Bot(client=market, rules=make_rules(), live=False, emit=lambda event: None)
         report = bot.run_once(purchase=False)
         self.assertEqual(report.decisions[0].action, "buy")
@@ -118,7 +119,7 @@ class BotTests(unittest.TestCase):
     def test_unknown_buy_outcome_holds_the_budget(self) -> None:
         market = FakeMarket()
         market.quotes[NAME] = cheap_quote()
-        market.listings[NAME] = [listing("10", 700, 100), listing("11", 600, 90)]
+        market.rows[NAME] = [listing("10", 700, 100), listing("11", 600, 90)]
         market.buy_error = TimeoutError("timed out")
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory) / "state.json"
@@ -140,7 +141,7 @@ class BotTests(unittest.TestCase):
     def test_auth_failure_releases_the_reservation(self) -> None:
         market = FakeMarket()
         market.quotes[NAME] = cheap_quote()
-        market.listings[NAME] = [listing("10", 700, 100)]
+        market.rows[NAME] = [listing("10", 700, 100)]
         market.buy_error = SteamAuthError("rejected")
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory) / "state.json"
@@ -187,8 +188,8 @@ class BotTests(unittest.TestCase):
         market = FakeMarket()
         market.quotes[NAME] = cheap_quote()
         market.quotes[other] = Quote(other, 800, 1000, 40)
-        market.listings[NAME] = [listing("10", 700, 100)]
-        market.listings[other] = [listing("20", 700, 100)]
+        market.rows[NAME] = [listing("10", 700, 100)]
+        market.rows[other] = [listing("20", 700, 100)]
         bot = Bot(
             client=market,
             rules=make_rules(items=(NAME, other), budget_cents=800, max_purchases=2),
