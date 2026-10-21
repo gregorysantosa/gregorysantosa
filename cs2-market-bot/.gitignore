@@ -1,0 +1,4 @@
+__pycache__/
+*.py[cod]
+.venv/
+cs2-market-bot-state.json
